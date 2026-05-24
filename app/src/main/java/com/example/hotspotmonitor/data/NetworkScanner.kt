@@ -78,13 +78,14 @@ class NetworkScanner(private val context: Context) {
                         val hostname = resolveHostname(ip)
                         val mac = readMacFromArp(ip) ?: "00:00:00:00:00:00"
                         val vendor = OuiDatabase.lookup(mac)
-                        val osGuess = guessOs(vendor, hostname)
+                        val (osGuess, deviceType) = guessOsAndType(vendor, hostname, emptyList())
 
                         val existing = _devices.value[ip]
                         val device = existing?.copy(
                             hostname = if (hostname != ip) hostname else existing.hostname,
                             vendor = if (vendor != "Unknown") vendor else existing.vendor,
                             osGuess = if (osGuess != OsType.UNKNOWN) osGuess else existing.osGuess,
+                            deviceType = if (deviceType != DeviceType.UNKNOWN) deviceType else existing.deviceType,
                             lastSeen = now,
                             isOnline = true,
                         ) ?: ConnectedDevice(
@@ -93,15 +94,23 @@ class NetworkScanner(private val context: Context) {
                             hostname = hostname,
                             vendor = vendor,
                             osGuess = osGuess,
+                            deviceType = deviceType,
                             firstSeen = now,
                             lastSeen = now,
                         )
                         _devices.update { it + (ip to device) }
 
-                        // Port scan asynchronously
+                        // Port scan then re-evaluate device type with port info
                         val openPorts = scanPorts(ip)
                         _devices.update { map ->
-                            map[ip]?.let { d -> map + (ip to d.copy(openPorts = openPorts)) } ?: map
+                            map[ip]?.let { d ->
+                                val (newOs, newType) = guessOsAndType(d.vendor, d.hostname, openPorts)
+                                map + (ip to d.copy(
+                                    openPorts = openPorts,
+                                    osGuess = if (newOs != OsType.UNKNOWN) newOs else d.osGuess,
+                                    deviceType = if (newType != DeviceType.UNKNOWN) newType else d.deviceType,
+                                ))
+                            } ?: map
                         }
                     } else {
                         // Mark existing device offline if it was online
@@ -157,16 +166,61 @@ class NetworkScanner(private val context: Context) {
         return open
     }
 
-    /** Heuristic OS detection from vendor name and hostname. */
-    private fun guessOs(vendor: String, hostname: String): OsType {
+    /** Heuristic OS + device type detection from vendor, hostname, and open ports. */
+    private fun guessOsAndType(vendor: String, hostname: String, openPorts: List<Int>): Pair<OsType, DeviceType> {
         val v = vendor.lowercase()
         val h = hostname.lowercase()
+        val hasPrinterPort = openPorts.any { it == 9100 || it == 515 }
+        val hasMediaPort = openPorts.any { it == 554 || it == 7000 || it == 8008 }
+        val hasSsh = openPorts.contains(22)
+        val hasSmb = openPorts.contains(445)
+        val hasAdb = openPorts.any { it == 5555 || it == 5556 }
+
         return when {
-            v.contains("apple") || h.contains("iphone") || h.contains("ipad") || h.contains("macbook") -> OsType.APPLE
-            v.contains("samsung") || v.contains("xiaomi") || v.contains("huawei") ||
-            v.contains("oneplus") || v.contains("google") || h.contains("android") -> OsType.ANDROID
-            v.contains("intel") || v.contains("realtek") || h.contains("windows") || h.contains("desktop") || h.contains("laptop") -> OsType.WINDOWS
-            else -> OsType.UNKNOWN
+            // Printer
+            hasPrinterPort || h.contains("print") || v.contains("canon") || v.contains("epson") ||
+            v.contains("hp inc") || v.contains("brother") || v.contains("lexmark") ->
+                Pair(OsType.PRINTER, DeviceType.PRINTER)
+
+            // Router / gateway
+            h.contains("router") || h.contains("gateway") || h.contains("fritzbox") ||
+            v.contains("cisco") || v.contains("tp-link") || v.contains("netgear") ||
+            v.contains("asus") && h.contains("router") || v.contains("mikrotik") ->
+                Pair(OsType.ROUTER, DeviceType.ROUTER)
+
+            // Smart TV / media
+            hasMediaPort || h.contains("chromecast") || h.contains("appletv") || h.contains("roku") ||
+            h.contains("firetv") || v.contains("roku") || v.contains("vizio") ||
+            v.contains("samsung electronics") && h.contains("tv") ->
+                Pair(OsType.SMART_TV, DeviceType.TV)
+
+            // Android TV
+            hasAdb && (h.contains("tv") || h.contains("shield") || v.contains("nvidia")) ->
+                Pair(OsType.ANDROID_TV, DeviceType.TV)
+
+            // macOS (Mac laptops/desktops)
+            v.contains("apple") && (h.contains("macbook") || h.contains("imac") || h.contains("mac-mini") || hasSsh || hasSmb) ->
+                Pair(OsType.MACOS, DeviceType.PC)
+
+            // iPhone / iPad
+            v.contains("apple") || h.contains("iphone") || h.contains("ipad") ->
+                Pair(OsType.IOS, DeviceType.PHONE)
+
+            // Android phone (ADB port = likely phone/tablet)
+            hasAdb || v.contains("samsung") || v.contains("xiaomi") || v.contains("huawei") ||
+            v.contains("oneplus") || h.contains("android") ->
+                Pair(OsType.ANDROID_PHONE, DeviceType.PHONE)
+
+            // Windows PC
+            hasSmb || h.contains("windows") || h.contains("desktop") || h.contains("laptop") ||
+            h.contains("pc") || v.contains("intel") || v.contains("realtek") ->
+                Pair(OsType.WINDOWS_PC, DeviceType.PC)
+
+            // Linux (SSH but no other strong signals)
+            hasSsh ->
+                Pair(OsType.LINUX, DeviceType.PC)
+
+            else -> Pair(OsType.UNKNOWN, DeviceType.UNKNOWN)
         }
     }
 

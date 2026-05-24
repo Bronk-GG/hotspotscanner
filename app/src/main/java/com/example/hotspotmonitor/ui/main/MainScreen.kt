@@ -340,35 +340,77 @@ fun DeviceCard(device: ConnectedDevice, onClick: () -> Unit) {
                 Spacer(Modifier.width(14.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
+                    // Device name row with device type badge
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = device.hostname.ifBlank { device.ip },
+                            style = MaterialTheme.typography.titleMedium.copy(color = TextPrimary),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        DeviceTypeBadge(device.deviceType)
+                    }
+                    Spacer(Modifier.height(3.dp))
+                    // OS label
                     Text(
-                        text = device.hostname.ifBlank { device.ip },
-                        style = MaterialTheme.typography.titleMedium.copy(color = TextPrimary),
+                        text = device.osGuess.label,
+                        style = MaterialTheme.typography.bodyMedium.copy(color = Cyan),
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(2.dp))
+                    // Vendor
                     Text(
-                        text = "${device.vendor} · ${device.osGuess.label}",
-                        style = MaterialTheme.typography.bodyMedium.copy(color = TextSecondary),
+                        text = device.vendor,
+                        style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PillLabel(text = device.ip, color = Cyan)
-                        if (device.mac != "00:00:00:00:00:00") {
-                            PillLabel(text = device.mac.uppercase(), color = TextSecondary)
+                    // IPv4 prominently
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "IPv4:",
+                            style = MaterialTheme.typography.labelSmall.copy(color = TextMuted),
+                        )
+                        Text(
+                            text = device.ip,
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                color = GreenOnline, fontWeight = FontWeight.Bold,
+                            ),
+                        )
+                    }
+                    if (device.mac != "00:00:00:00:00:00") {
+                        Spacer(Modifier.height(2.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "MAC:",
+                                style = MaterialTheme.typography.labelSmall.copy(color = TextMuted),
+                            )
+                            Text(
+                                text = device.mac.uppercase(),
+                                style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary),
+                            )
                         }
                     }
 
                     if (device.openPorts.isNotEmpty()) {
                         Spacer(Modifier.height(6.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            device.openPorts.take(5).forEach { port ->
+                            device.openPorts.take(4).forEach { port ->
                                 PillLabel(text = portName(port), color = Amber)
                             }
-                            if (device.openPorts.size > 5) {
-                                PillLabel(text = "+${device.openPorts.size - 5}", color = TextMuted)
+                            if (device.openPorts.size > 4) {
+                                PillLabel(text = "+${device.openPorts.size - 4}", color = TextMuted)
                             }
                         }
                     }
@@ -401,6 +443,22 @@ fun DeviceCard(device: ConnectedDevice, onClick: () -> Unit) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DeviceTypeBadge(deviceType: com.example.hotspotmonitor.data.DeviceType) {
+    if (deviceType == com.example.hotspotmonitor.data.DeviceType.UNKNOWN) return
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(Cyan.copy(alpha = 0.12f))
+            .padding(horizontal = 5.dp, vertical = 2.dp),
+    ) {
+        Text(
+            text = "${deviceType.icon} ${deviceType.label}",
+            style = MaterialTheme.typography.labelSmall.copy(color = Cyan),
+        )
     }
 }
 

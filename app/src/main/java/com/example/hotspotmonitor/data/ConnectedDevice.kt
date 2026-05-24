@@ -1,19 +1,21 @@
 package com.example.hotspotmonitor.data
 
 /**
- * Represents a device currently or previously connected to our hotspot.
+ * Represents a device discovered on the network.
  */
 data class ConnectedDevice(
-    /** IP address on our subnet, e.g. 192.168.43.5 */
+    /** IP address on the subnet, e.g. 192.168.1.5 */
     val ip: String,
     /** MAC address in lowercase colon-separated form, e.g. a4:c3:f0:11:22:33 */
     val mac: String,
-    /** Human-readable hostname resolved via reverse-DNS or mDNS, e.g. "John's iPhone" */
+    /** Human-readable hostname resolved via reverse-DNS or mDNS */
     val hostname: String,
     /** Hardware vendor resolved from the MAC OUI prefix, e.g. "Apple Inc." */
     val vendor: String,
     /** Heuristic OS guess based on open ports, mDNS services, and MAC OUI */
     val osGuess: OsType,
+    /** Whether this is a phone, PC, printer, etc. */
+    val deviceType: DeviceType = DeviceType.UNKNOWN,
     /** mDNS / NSD service types advertised by this device */
     val services: List<String> = emptyList(),
     /** Open TCP ports found during the port scan */
@@ -31,9 +33,24 @@ data class ConnectedDevice(
 )
 
 enum class OsType(val label: String, val emoji: String) {
-    APPLE("Apple / iOS", "🍎"),
-    ANDROID("Android", "🤖"),
-    WINDOWS("Windows", "🪟"),
+    IOS("iPhone / iPad", "📱"),
+    MACOS("macOS", "💻"),
+    ANDROID_PHONE("Android Phone", "📱"),
+    ANDROID_TV("Android TV", "📺"),
+    WINDOWS_PC("Windows PC", "🖥️"),
     LINUX("Linux", "🐧"),
-    UNKNOWN("Unknown", "📱"),
+    ROUTER("Router / Gateway", "📡"),
+    PRINTER("Printer", "🖨️"),
+    SMART_TV("Smart TV", "📺"),
+    UNKNOWN("Unknown Device", "❓"),
+}
+
+enum class DeviceType(val label: String, val icon: String) {
+    PHONE("Phone", "📱"),
+    PC("PC / Laptop", "💻"),
+    TV("TV / Media", "📺"),
+    PRINTER("Printer", "🖨️"),
+    ROUTER("Router", "📡"),
+    TABLET("Tablet", "📟"),
+    UNKNOWN("Unknown", "❓"),
 }
