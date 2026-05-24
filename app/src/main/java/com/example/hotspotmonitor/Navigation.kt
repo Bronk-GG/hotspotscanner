@@ -1,15 +1,12 @@
 package com.example.hotspotmonitor
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.hotspotmonitor.data.AppRepository
-import com.example.hotspotmonitor.data.HotspotConfig
 import com.example.hotspotmonitor.ui.detail.DeviceDetailScreen
 import com.example.hotspotmonitor.ui.main.DashboardScreen
 import com.example.hotspotmonitor.ui.main.DashboardViewModel
@@ -25,7 +22,7 @@ sealed class Screen {
 fun MainNavigation(repository: AppRepository) {
     val backStack = remember { mutableStateListOf<Screen>(Screen.Main) }
     val currentScreen = backStack.lastOrNull() ?: Screen.Main
-    
+
     val dashboardViewModel = remember { DashboardViewModel(repository) }
 
     AnimatedContent(targetState = currentScreen, label = "navigation") { screen ->
@@ -51,10 +48,7 @@ fun MainNavigation(repository: AppRepository) {
                 }
             }
             is Screen.Settings -> {
-                val config by dashboardViewModel.hotspotConfig.collectAsStateWithLifecycle()
                 SettingsScreen(
-                    currentConfig = config,
-                    onSave = { newConfig -> dashboardViewModel.updateConfig(newConfig) },
                     onBack = { backStack.removeLastOrNull() },
                 )
             }

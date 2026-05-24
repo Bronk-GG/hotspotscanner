@@ -4,8 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.hotspotmonitor.data.AppRepository
 import com.example.hotspotmonitor.data.ConnectedDevice
-import com.example.hotspotmonitor.data.HotspotConfig
-import com.example.hotspotmonitor.data.HotspotState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -15,39 +13,27 @@ import kotlinx.coroutines.launch
 
 class DashboardViewModel(private val repository: AppRepository) : ViewModel() {
 
-    val hotspotState: StateFlow<HotspotState> = repository.hotspotState
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HotspotState.OFF)
+    val localIp: StateFlow<String> = repository.localIp
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "Detecting...")
 
-    val hotspotConfig: StateFlow<HotspotConfig> = repository.hotspotConfig
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HotspotConfig())
-
-    val gatewayIp: StateFlow<String> = repository.gatewayIp
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "192.168.43.1")
+    val networkName: StateFlow<String> = repository.networkName
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "Detecting...")
 
     val devices: StateFlow<List<ConnectedDevice>> = repository.devices
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    private val _errorMessage = MutableStateFlow<String?>(null)
-    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+    private val _isScanning = MutableStateFlow(false)
+    val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
 
-    fun toggleHotspot() {
+    fun toggleScanning() {
         viewModelScope.launch {
-            if (repository.hotspotState.value == HotspotState.ON) {
-                repository.stopHotspot()
+            if (_isScanning.value) {
+                repository.stopScanning()
+                _isScanning.value = false
             } else {
-                repository.startHotspot(
-                    onStarted = { _errorMessage.value = null },
-                    onError = { msg -> _errorMessage.value = msg },
-                )
+                repository.startScanning()
+                _isScanning.value = true
             }
         }
-    }
-
-    fun dismissError() {
-        _errorMessage.value = null
-    }
-
-    fun updateConfig(config: HotspotConfig) {
-        repository.updateConfig(config)
     }
 }

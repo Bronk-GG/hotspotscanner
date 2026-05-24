@@ -28,7 +28,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -36,37 +35,28 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Snackbar
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.hotspotmonitor.data.ConnectedDevice
-import com.example.hotspotmonitor.data.HotspotState
 import com.example.hotspotmonitor.data.OsType
 import com.example.hotspotmonitor.theme.Amber
-import com.example.hotspotmonitor.theme.AmberGlow
 import com.example.hotspotmonitor.theme.Background
 import com.example.hotspotmonitor.theme.BorderColor
 import com.example.hotspotmonitor.theme.CardBackground
@@ -74,15 +64,10 @@ import com.example.hotspotmonitor.theme.Cyan
 import com.example.hotspotmonitor.theme.CyanGlow
 import com.example.hotspotmonitor.theme.GreenGlow
 import com.example.hotspotmonitor.theme.GreenOnline
-import com.example.hotspotmonitor.theme.RedAlert
-import com.example.hotspotmonitor.theme.RedGlow
 import com.example.hotspotmonitor.theme.SurfaceVariant
 import com.example.hotspotmonitor.theme.TextMuted
 import com.example.hotspotmonitor.theme.TextPrimary
 import com.example.hotspotmonitor.theme.TextSecondary
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,32 +76,13 @@ fun DashboardScreen(
     onDeviceClick: (String) -> Unit,
     onSettingsClick: () -> Unit,
 ) {
-    val hotspotState by viewModel.hotspotState.collectAsStateWithLifecycle()
-    val config by viewModel.hotspotConfig.collectAsStateWithLifecycle()
-    val gatewayIp by viewModel.gatewayIp.collectAsStateWithLifecycle()
+    val isScanning by viewModel.isScanning.collectAsStateWithLifecycle()
+    val localIp by viewModel.localIp.collectAsStateWithLifecycle()
+    val networkName by viewModel.networkName.collectAsStateWithLifecycle()
     val devices by viewModel.devices.collectAsStateWithLifecycle()
-    val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
-
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    LaunchedEffect(errorMessage) {
-        errorMessage?.let {
-            snackbarHostState.showSnackbar(it)
-            viewModel.dismissError()
-        }
-    }
 
     Scaffold(
         containerColor = Background,
-        snackbarHost = {
-            SnackbarHost(snackbarHostState) { data ->
-                Snackbar(
-                    snackbarData = data,
-                    containerColor = RedAlert,
-                    contentColor = TextPrimary,
-                )
-            }
-        },
         topBar = {
             TopAppBar(
                 title = {
@@ -151,14 +117,13 @@ fun DashboardScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // Hotspot control card
+            // Network scanner control card
             item {
-                HotspotControlCard(
-                    hotspotState = hotspotState,
-                    ssid = config.ssid,
-                    password = config.password,
-                    gatewayIp = gatewayIp,
-                    onToggle = { viewModel.toggleHotspot() },
+                ScannerControlCard(
+                    isScanning = isScanning,
+                    networkName = networkName,
+                    localIp = localIp,
+                    onToggle = { viewModel.toggleScanning() },
                 )
             }
 
@@ -172,11 +137,12 @@ fun DashboardScreen(
                 }
             }
 
-            // Device list
-            if (devices.isEmpty() && hotspotState == HotspotState.ON) {
+            // Empty state
+            if (devices.isEmpty() && isScanning) {
                 item { EmptyDevicesCard() }
             }
 
+            // Device list
             items(devices, key = { it.ip }) { device ->
                 DeviceCard(
                     device = device,
@@ -190,40 +156,26 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun HotspotControlCard(
-    hotspotState: HotspotState,
-    ssid: String,
-    password: String,
-    gatewayIp: String,
+private fun ScannerControlCard(
+    isScanning: Boolean,
+    networkName: String,
+    localIp: String,
     onToggle: () -> Unit,
 ) {
-    val isOn = hotspotState == HotspotState.ON
-    val isTransitioning = hotspotState == HotspotState.STARTING || hotspotState == HotspotState.STOPPING
-
     val pulseTransition = rememberInfiniteTransition(label = "pulse")
     val pulseAlpha by pulseTransition.animateFloat(
-        initialValue = 0.3f,
+        initialValue = 0.4f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
         label = "pulseAlpha",
     )
 
     val accentColor by animateColorAsState(
-        targetValue = when (hotspotState) {
-            HotspotState.ON -> GreenOnline
-            HotspotState.ERROR -> RedAlert
-            HotspotState.STARTING, HotspotState.STOPPING -> Amber
-            else -> TextMuted
-        },
+        targetValue = if (isScanning) GreenOnline else TextMuted,
         label = "accentColor",
     )
     val glowColor by animateColorAsState(
-        targetValue = when (hotspotState) {
-            HotspotState.ON -> GreenGlow
-            HotspotState.ERROR -> RedGlow
-            HotspotState.STARTING, HotspotState.STOPPING -> AmberGlow
-            else -> Color.Transparent
-        },
+        targetValue = if (isScanning) GreenGlow else Color.Transparent,
         label = "glowColor",
     )
 
@@ -243,7 +195,6 @@ private fun HotspotControlCard(
                 .border(1.dp, glowColor, RoundedCornerShape(20.dp)),
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
-                // Header row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -251,27 +202,22 @@ private fun HotspotControlCard(
                 ) {
                     Column {
                         Text(
-                            text = "HOTSPOT",
-                            style = MaterialTheme.typography.labelSmall.copy(color = TextMuted, letterSpacing = 3.sp),
+                            text = "NETWORK SCANNER",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                color = TextMuted, letterSpacing = 3.sp,
+                            ),
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            text = when (hotspotState) {
-                                HotspotState.ON -> "● BROADCASTING"
-                                HotspotState.STARTING -> "◌ STARTING..."
-                                HotspotState.STOPPING -> "◌ STOPPING..."
-                                HotspotState.ERROR -> "✕ ERROR"
-                                HotspotState.OFF -> "○ OFFLINE"
-                            },
+                            text = if (isScanning) "● SCANNING" else "○ IDLE",
                             style = MaterialTheme.typography.labelLarge.copy(
-                                color = if (isTransitioning) Amber.copy(alpha = pulseAlpha) else accentColor,
+                                color = if (isScanning) GreenOnline.copy(alpha = pulseAlpha) else TextMuted,
                             ),
                         )
                     }
                     Switch(
-                        checked = isOn || hotspotState == HotspotState.STARTING,
+                        checked = isScanning,
                         onCheckedChange = { onToggle() },
-                        enabled = !isTransitioning,
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Background,
                             checkedTrackColor = GreenOnline,
@@ -281,19 +227,20 @@ private fun HotspotControlCard(
                     )
                 }
 
-                if (isOn) {
-                    Spacer(Modifier.height(20.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        HotspotInfoItem(label = "SSID", value = ssid)
-                        HotspotInfoItem(label = "PASSWORD", value = password)
-                        HotspotInfoItem(label = "GATEWAY", value = gatewayIp)
-                    }
+                Spacer(Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    NetworkInfoItem(label = "NETWORK", value = networkName)
+                    NetworkInfoItem(label = "YOUR IP", value = localIp)
                 }
 
-                if (!isOn && hotspotState == HotspotState.OFF) {
+                if (!isScanning) {
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        "Tap the switch to create a WiFi hotspot and start monitoring connected devices.",
+                        "Turn on scanning to discover devices on your current network.",
                         style = MaterialTheme.typography.bodyMedium.copy(color = TextSecondary),
                     )
                 }
@@ -303,7 +250,7 @@ private fun HotspotControlCard(
 }
 
 @Composable
-private fun HotspotInfoItem(label: String, value: String) {
+private fun NetworkInfoItem(label: String, value: String) {
     Column {
         Text(label, style = MaterialTheme.typography.labelSmall.copy(color = TextMuted, letterSpacing = 2.sp))
         Spacer(Modifier.height(2.dp))
@@ -342,18 +289,20 @@ private fun EmptyDevicesCard() {
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(CardBackground)
-            .border(1.dp, BorderColor, RoundedCornerShape(16.dp))
+            .border(1.dp, CyanGlow, RoundedCornerShape(16.dp))
             .padding(32.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.Wifi, contentDescription = null, tint = TextMuted, modifier = Modifier.size(40.dp))
+            Icon(Icons.Default.Wifi, contentDescription = null, tint = Cyan, modifier = Modifier.size(40.dp))
             Spacer(Modifier.height(12.dp))
-            Text("Scanning for devices...", style = MaterialTheme.typography.bodyLarge.copy(color = TextSecondary))
+            Text("Scanning the network...", style = MaterialTheme.typography.bodyLarge.copy(color = TextSecondary))
             Spacer(Modifier.height(4.dp))
-            Text("Devices that connect to your hotspot\nwill appear here automatically.",
+            Text(
+                "Other devices on the same network\nwill appear here automatically.",
                 style = MaterialTheme.typography.bodyMedium.copy(color = TextMuted),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }
@@ -377,7 +326,6 @@ fun DeviceCard(device: ConnectedDevice, onClick: () -> Unit) {
                 .padding(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // OS / vendor icon circle
                 Box(
                     modifier = Modifier
                         .size(48.dp)
@@ -392,7 +340,6 @@ fun DeviceCard(device: ConnectedDevice, onClick: () -> Unit) {
                 Spacer(Modifier.width(14.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    // Device name
                     Text(
                         text = device.hostname.ifBlank { device.ip },
                         style = MaterialTheme.typography.titleMedium.copy(color = TextPrimary),
@@ -400,7 +347,6 @@ fun DeviceCard(device: ConnectedDevice, onClick: () -> Unit) {
                         overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(2.dp))
-                    // Vendor + OS
                     Text(
                         text = "${device.vendor} · ${device.osGuess.label}",
                         style = MaterialTheme.typography.bodyMedium.copy(color = TextSecondary),
@@ -408,7 +354,6 @@ fun DeviceCard(device: ConnectedDevice, onClick: () -> Unit) {
                         overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.height(6.dp))
-                    // IP + MAC
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         PillLabel(text = device.ip, color = Cyan)
                         if (device.mac != "00:00:00:00:00:00") {
@@ -416,7 +361,6 @@ fun DeviceCard(device: ConnectedDevice, onClick: () -> Unit) {
                         }
                     }
 
-                    // Open ports
                     if (device.openPorts.isNotEmpty()) {
                         Spacer(Modifier.height(6.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -429,7 +373,6 @@ fun DeviceCard(device: ConnectedDevice, onClick: () -> Unit) {
                         }
                     }
 
-                    // Services
                     if (device.services.isNotEmpty()) {
                         Spacer(Modifier.height(4.dp))
                         Text(
@@ -444,7 +387,6 @@ fun DeviceCard(device: ConnectedDevice, onClick: () -> Unit) {
                 Spacer(Modifier.width(8.dp))
 
                 Column(horizontalAlignment = Alignment.End) {
-                    // Online dot
                     PulsingDot(color = onlineColor, size = 10.dp, active = device.isOnline)
                     Spacer(Modifier.height(8.dp))
                     Text(
